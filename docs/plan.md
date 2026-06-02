@@ -2,9 +2,9 @@
 
 > **Goal:** 将 Oh My Zsh 插件 `ai-cmd` 升级为跨平台 Rust CLI，支持 bash / zsh / fish / PowerShell 及任意终端。
 
-**Architecture:** Rust 二进制 `ask-cmd` 负责 AI 调用、输出清洗、命令校验与交互确认；各 shell 仅保留薄包装函数 `ask`。配置统一放在 XDG 目录 `~/.config/ask-cmd/config.toml`。
+**Architecture:** Rust 二进制 `ask-cmd` 仅调用本机 `claude` CLI；各 shell 保留薄包装 `ask()`。不支持 OpenAI/Ollama 等自接 API。
 
-**Tech Stack:** Rust, clap, reqwest, tokio, serde/toml, dialoguer
+**Tech Stack:** Rust, clap, tokio (subprocess)
 
 ---
 
@@ -15,8 +15,7 @@
 | `extract` | 从 markdown / JSON / 纯文本提取命令 |
 | `validate` | 拒绝说明文字、占位符、危险命令提示 |
 | `prompt` | 按 OS 生成 system / user prompt |
-| `providers` | claude CLI / OpenAI / Ollama |
-| `config` | TOML 配置加载 |
+| `providers` | 仅 claude CLI（未安装时友好提示） |
 | `shell` | `install` 写入各 shell rc |
 | `cli` | 子命令：默认查询、`-n` 仅输出、install |
 

@@ -1,4 +1,3 @@
-use ask_cmd::config::Config;
 use ask_cmd::extract::extract_command;
 use ask_cmd::validate::{looks_like_command, validate_command};
 
@@ -17,7 +16,8 @@ fn rejects_chinese_placeholder() {
 }
 
 #[test]
-fn default_config_loads() {
-    let cfg = Config::default();
-    assert_eq!(cfg.provider, "claude");
+fn claude_hint_is_helpful() {
+    let hint = ask_cmd::claude_install_hint();
+    assert!(hint.contains("claude login"));
+    assert!(hint.contains("Claude Code"));
 }

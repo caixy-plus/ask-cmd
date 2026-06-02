@@ -2,6 +2,8 @@
 
 Natural language → shell command. Cross-platform CLI written in Rust.
 
+**仅通过本机 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 调用，不支持自行接入 API Key。**
+
 Works in **bash**, **zsh**, **fish**, **PowerShell**, and any terminal that can run a subprocess.
 
 ```bash
@@ -13,32 +15,33 @@ Suggested:  touch hello.txt
 Run? [Y/n/c(opy)/q]:
 ```
 
-## Install
+## 前置条件
 
-### From source
+安装并登录 Claude Code：
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude login
+claude -p hello    # 验证可用
+```
+
+未安装时 `ask` 会提示安装步骤。
+
+## Install
 
 ```bash
 git clone https://github.com/caixy-plus/ask-cmd.git
 cd ask-cmd
 cargo install --path .
 ask-cmd install          # adds `ask()` to your shell rc
-ask-cmd init             # optional: ~/.config/ask-cmd/config.toml
 ```
 
 Restart the terminal, or `source ~/.zshrc` (or your shell rc).
 
-### Requirements
-
-| Provider | Needs |
-|----------|--------|
-| `claude` (default) | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) logged in |
-| `openai` | API key in config or `OPENAI_API_KEY` |
-| `ollama` | Local [Ollama](https://ollama.com) server |
-
 ## Usage
 
 ```bash
-ask 创建空文件 test.txt       # AI → confirm → run
+ask 创建空文件 test.txt       # Claude → confirm → run
 ask -n 怎么创建文件 test.txt  # print command only
 ask-cmd install --shell fish
 ask-cmd install --shell powershell   # Windows
@@ -46,25 +49,7 @@ ask-cmd install --shell powershell   # Windows
 
 Confirm: **Y** run · **n** cancel · **c** copy · **q** quit
 
-## Config
-
-`~/.config/ask-cmd/config.toml`:
-
-```toml
-provider = "claude"
-timeout_secs = 45
-
-# openai_api_key = "sk-..."
-# openai_base_url = "https://api.openai.com/v1"
-# openai_model = "gpt-4o-mini"
-
-# ollama_url = "http://127.0.0.1:11434"
-# ollama_model = "llama3.2"
-```
-
 ## Shell integration
-
-`ask-cmd install` writes a small wrapper:
 
 | Shell | File |
 |-------|------|

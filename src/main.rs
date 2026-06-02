@@ -5,13 +5,12 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use console::style;
 
-use ask_cmd::config::Config;
 use ask_cmd::resolve_command;
 use ask_cmd::shell::{self, ShellKind};
 use ask_cmd::validate;
 
 #[derive(Parser, Debug)]
-#[command(name = "ask-cmd", about = "Natural language → shell command (cross-platform)")]
+#[command(name = "ask-cmd", about = "Natural language → shell command via Claude Code CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -36,8 +35,6 @@ enum Commands {
         #[arg(long, default_value = "auto")]
         shell: String,
     },
-    /// Write default config to ~/.config/ask-cmd/config.toml
-    Init,
 }
 
 fn main() -> Result<()> {
@@ -60,11 +57,6 @@ fn main() -> Result<()> {
             eprintln!("Restart your terminal or run: source {}", target.display());
             return Ok(());
         }
-        Some(Commands::Init) => {
-            let path = Config::save_default()?;
-            eprintln!("{} Wrote {}", style("✓").green(), path.display());
-            return Ok(());
-        }
         None => {}
     }
 
@@ -75,15 +67,16 @@ fn main() -> Result<()> {
     }
 
     let query = cli.query.join(" ");
-    let config = Config::load()?;
 
-    eprintln!(
-        "{} Asking {}...",
-        style("🤖").yellow(),
-        config.provider
-    );
+    eprintln!("{} Asking Claude...", style("🤖").yellow());
 
-    let cmd = resolve_command(&query, &config)?;
+    let cmd = match resolve_command(&query) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+    };
 
     if cli.dry_run {
         println!("{cmd}");
@@ -172,8 +165,11 @@ fn copy_to_clipboard(text: &str) {
     {
         let _ = StdCommand::new("sh")
             .arg("-c")
-            .arg(format!("printf %s | xclip -selection clipboard 2>/dev/null || printf %s | wl-copy 2>/dev/null", 
-                shell_escape(text), shell_escape(text)))
+            .arg(format!(
+                "printf {} | xclip -selection clipboard 2>/dev/null || printf {} | wl-copy 2>/dev/null",
+                shell_escape(text),
+                shell_escape(text)
+            ))
             .status();
     }
     #[cfg(target_os = "windows")]
