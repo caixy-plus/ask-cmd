@@ -1,0 +1,32 @@
+[package]
+name = "ask-cmd"
+version = "0.1.0"
+edition = "2021"
+description = "Natural language to shell command — cross-platform CLI"
+license = "MIT"
+repository = "https://github.com/caixy-plus/ask-cmd"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+console = "0.15"
+dialoguer = "0.11"
+dirs = "6"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "process", "rt-multi-thread"] }
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bin]]
+name = "ask-cmd"
+path = "src/main.rs"
+
+[lib]
+name = "ask_cmd"
+path = "src/lib.rs"
