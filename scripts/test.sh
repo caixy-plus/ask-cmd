@@ -18,7 +18,7 @@ echo "=== unit pipeline (no network) ==="
 
 if command -v claude >/dev/null 2>&1; then
   echo "=== live claude dry-run ==="
-  OUT=$($BIN -n "create empty file /tmp/ask-cmd-smoke-$$.txt" 2>/dev/null)
+  OUT=$($BIN -n "create empty file /tmp/ask-cmd-smoke-$$.txt" 2>/dev/null | head -1)
   echo "got: $OUT"
   [[ "$OUT" == touch* ]] || [[ "$OUT" == *New-Item* ]] || { echo "unexpected: $OUT"; exit 1; }
   echo "PASS live smoke"

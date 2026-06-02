@@ -7,12 +7,27 @@ Natural language → shell command. Cross-platform CLI written in Rust.
 Works in **bash**, **zsh**, **fish**, **PowerShell**, and any terminal that can run a subprocess.
 
 ```bash
-$ ask -n create empty file hello.txt
-touch hello.txt
+$ ask 创建空文件 test.txt
 
-$ ask create empty file hello.txt
-Suggested:  touch hello.txt
+🤖 Asking Claude for suggestions...
+
+Suggestions for: 创建空文件 test.txt
+
+  ▸ touch test.txt
+    echo '' > test.txt
+    printf '' > test.txt
+    ...
+
+  ↑↓ select  ↵ confirm  r retry  q quit
+
+Selected:  touch test.txt
 Run? [Y/n/c(opy)/q]:
+```
+
+`-n` 只列出全部建议，不交互：
+
+```bash
+ask -n 创建空文件 test.txt
 ```
 
 ## 前置条件

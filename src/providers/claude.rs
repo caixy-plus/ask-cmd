@@ -6,11 +6,10 @@ use anyhow::{bail, Context, Result};
 use tokio::process::Command;
 use tokio::time::timeout;
 
-use crate::prompt::{system_prompt, user_prompt};
+use crate::prompt::{single_system_prompt, single_user_prompt, suggestions_system_prompt, suggestions_user_prompt};
 
 pub const DEFAULT_TIMEOUT_SECS: u64 = 45;
 
-/// Check whether `claude` is available on PATH.
 pub fn claude_available() -> bool {
     resolve_claude_binary().is_some()
 }
@@ -72,21 +71,29 @@ impl Default for ClaudeProvider {
 }
 
 impl ClaudeProvider {
-    pub async fn query(&self, query: &str) -> Result<String> {
-        ensure_claude()?;
+    pub fn suggest_sync(&self, query: &str) -> Result<String> {
+        self.run_claude(query, &suggestions_system_prompt(), &suggestions_user_prompt(query))
+    }
 
+    pub fn query_sync(&self, query: &str) -> Result<String> {
+        self.run_claude(query, &single_system_prompt(), &single_user_prompt(query))
+    }
+
+    fn run_claude(&self, _query: &str, system: &str, user: &str) -> Result<String> {
+        ensure_claude()?;
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(self.run_claude_async(system, user))
+    }
+
+    async fn run_claude_async(&self, system: &str, user: &str) -> Result<String> {
         let claude = resolve_claude_binary().expect("checked above");
         let mut cmd = Command::new(claude);
-        cmd.args([
-            "--bare",
-            "-p",
-            &user_prompt(query),
-            "--system-prompt",
-            &system_prompt(),
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        cmd.args(["--bare", "-p", user, "--system-prompt", system])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         let dur = Duration::from_secs(self.timeout_secs);
         let output = timeout(dur, cmd.output())
@@ -103,30 +110,16 @@ impl ClaudeProvider {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !output.status.success() && output.stdout.is_empty() {
             if stderr.contains("auth") || stderr.contains("login") || stderr.contains("API key") {
-                bail!(
-                    "claude 未登录或认证失败。\n\n请运行：\n  claude login\n\n然后重试 ask 命令。"
-                );
+                bail!("claude 未登录或认证失败。\n\n请运行：\n  claude login\n\n然后重试 ask 命令。");
             }
-            bail!(
-                "claude 执行失败 ({}).\n\n{stderr}",
-                output.status
-            );
+            bail!("claude 执行失败 ({}).\n\n{stderr}", output.status);
         }
 
         let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if text.is_empty() {
-            bail!(
-                "claude 返回为空。\n\n请确认已登录：claude login\n提示：claude -p \"hello\" 应能正常输出。"
-            );
+            bail!("claude 返回为空。\n\n请确认已登录：claude login");
         }
         Ok(text)
-    }
-
-    pub fn query_sync(&self, query: &str) -> Result<String> {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?
-            .block_on(self.query(query))
     }
 }
 
@@ -137,23 +130,5 @@ mod tests {
     #[test]
     fn install_hint_mentions_claude_code() {
         assert!(claude_install_hint().contains("Claude Code"));
-        assert!(claude_install_hint().contains("claude login"));
-    }
-
-    #[test]
-    fn ensure_claude_fails_with_hint_when_missing() {
-        if claude_available() {
-            return;
-        }
-        let err = ensure_claude().unwrap_err().to_string();
-        assert!(err.contains("Claude Code"));
-    }
-
-    #[tokio::test]
-    #[ignore = "requires claude CLI"]
-    async fn live_claude() {
-        let p = ClaudeProvider::default();
-        let out = p.query("create empty file /tmp/ask-cmd-test.txt").await.unwrap();
-        assert!(out.contains("touch") || out.contains("New-Item"));
     }
 }

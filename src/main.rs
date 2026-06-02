@@ -5,9 +5,10 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use console::style;
 
-use ask_cmd::resolve_command;
 use ask_cmd::shell::{self, ShellKind};
+use ask_cmd::ui::picker::PickResult;
 use ask_cmd::validate;
+use ask_cmd::{pick_command, resolve_command, resolve_suggestions};
 
 #[derive(Parser, Debug)]
 #[command(name = "ask-cmd", about = "Natural language → shell command via Claude Code CLI")]
@@ -15,11 +16,11 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Print command only, do not confirm or execute
+    /// Print command(s) only, do not confirm or execute
     #[arg(short = 'n', long = "dry-run")]
     dry_run: bool,
 
-    /// Skip confirmation and execute immediately (use with care)
+    /// Skip picker/confirmation and execute the first suggestion
     #[arg(short = 'y', long = "yes")]
     yes: bool,
 
@@ -68,32 +69,73 @@ fn main() -> Result<()> {
 
     let query = cli.query.join(" ");
 
-    eprintln!("{} Asking Claude...", style("🤖").yellow());
+    if cli.dry_run {
+        return run_dry_run(&query);
+    }
 
-    let cmd = match resolve_command(&query) {
-        Ok(c) => c,
+    if cli.yes {
+        return run_first_suggestion(&query);
+    }
+
+    run_interactive(&query)
+}
+
+fn run_dry_run(query: &str) -> Result<()> {
+    eprintln!("{} Asking Claude for suggestions...", style("🤖").yellow());
+    match resolve_suggestions(query) {
+        Ok(list) => {
+            for cmd in &list {
+                println!("{cmd}");
+            }
+            Ok(())
+        }
         Err(e) => {
             eprintln!("{e:#}");
             std::process::exit(1);
         }
-    };
-
-    if cli.dry_run {
-        println!("{cmd}");
-        return Ok(());
     }
+}
 
-    if cli.yes {
-        run_command(&cmd)?;
-        return Ok(());
+fn run_first_suggestion(query: &str) -> Result<()> {
+    eprintln!("{} Asking Claude...", style("🤖").yellow());
+    let cmd = resolve_suggestions(query)
+        .map(|v| v.into_iter().next().expect("non-empty"))
+        .or_else(|_| resolve_command(query))?;
+    run_command(&cmd)
+}
+
+fn run_interactive(query: &str) -> Result<()> {
+    loop {
+        eprintln!("{} Asking Claude for suggestions...", style("🤖").yellow());
+        let suggestions = match resolve_suggestions(query) {
+            Ok(list) => list,
+            Err(e) => {
+                eprintln!("{e:#}");
+                std::process::exit(1);
+            }
+        };
+
+        eprintln!();
+        eprintln!("Suggestions for: {}", style(query).bold());
+
+        match pick_command(&suggestions)? {
+            PickResult::Selected(idx) => {
+                let cmd = &suggestions[idx];
+                confirm_and_run(cmd)?;
+                return Ok(());
+            }
+            PickResult::Retry => continue,
+            PickResult::Cancel => {
+                eprintln!("Cancelled.");
+                return Ok(());
+            }
+        }
     }
-
-    confirm_and_run(&cmd)
 }
 
 fn confirm_and_run(cmd: &str) -> Result<()> {
     println!();
-    println!("{}  {}", style("Suggested:").cyan().bold(), style(cmd).bold());
+    println!("{}  {}", style("Selected:").cyan().bold(), style(cmd).bold());
 
     if validate::is_dangerous(cmd) {
         println!("{}", style("⚠  Potentially destructive — review carefully").red());
@@ -126,16 +168,8 @@ fn confirm_and_run(cmd: &str) -> Result<()> {
 
 fn run_command(cmd: &str) -> Result<()> {
     println!("{cmd}");
-    let shell = if cfg!(target_os = "windows") {
-        "cmd"
-    } else {
-        "sh"
-    };
-    let flag = if cfg!(target_os = "windows") {
-        "/C"
-    } else {
-        "-c"
-    };
+    let shell = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
+    let flag = if cfg!(target_os = "windows") { "/C" } else { "-c" };
     let status = StdCommand::new(shell)
         .arg(flag)
         .arg(cmd)

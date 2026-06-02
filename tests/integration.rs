@@ -1,18 +1,25 @@
-use ask_cmd::extract::extract_command;
+use ask_cmd::suggestions::parse_suggestions;
 use ask_cmd::validate::{looks_like_command, validate_command};
 
 #[test]
 fn pipeline_mock_response() {
     let raw = "touch /tmp/demo.txt";
-    let cmd = extract_command(raw).unwrap();
+    let cmd = ask_cmd::extract::extract_command(raw).unwrap();
     validate_command(&cmd).unwrap();
     assert!(looks_like_command(&cmd));
 }
 
 #[test]
+fn parses_multiple_suggestions() {
+    let raw = r#"["touch a.txt", "echo '' > a.txt", "ls"]"#;
+    let cmds = parse_suggestions(raw).unwrap();
+    assert!(cmds.len() >= 2);
+}
+
+#[test]
 fn rejects_chinese_placeholder() {
-    let raw = "touch 文件名";
-    assert!(extract_command(raw).is_err() || validate_command("touch 文件名").is_err());
+    let raw = r#"["touch 文件名"]"#;
+    assert!(parse_suggestions(raw).is_err());
 }
 
 #[test]
