@@ -1,10 +1,9 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 
-const MARKER_START: &str = "### ask-cmd shell integration";
-const MARKER_END: &str = "### end ask-cmd shell integration";
+const PATH_MARKER: &str = "# ask (Rust CLI) — ensure cargo bin on PATH";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellKind {
@@ -46,11 +45,54 @@ impl ShellKind {
     }
 }
 
-pub fn install(shell: ShellKind, bin: &Path) -> Result<PathBuf> {
-    let snippet = build_snippet(bin);
-    let target = rc_path(shell)?;
-    append_snippet(&target, &snippet)?;
-    Ok(target)
+/// Remove legacy Oh My Zsh wrapper / ai-cmd plugin snippets from a shell rc file.
+pub fn purge_legacy_integration(path: &PathBuf) -> Result<bool> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let mut content = fs::read_to_string(path)?;
+    let original = content.clone();
+
+    while let (Some(start), Some(end)) = (
+        content.find("### ask-cmd shell integration"),
+        content.find("### end ask-cmd shell integration"),
+    ) {
+        let remove_end = end + "### end ask-cmd shell integration".len();
+        content.replace_range(start..remove_end, "");
+    }
+
+    while let (Some(start), Some(end)) = (
+        content.find("### ai-cmd"),
+        content.find("### end ai-cmd"),
+    ) {
+        let remove_end = end + "### end ai-cmd".len();
+        content.replace_range(start..remove_end, "");
+    }
+
+    // Old zsh plugin: ask() { ai-cmd ... } or ask() wrapping ask-cmd path
+    if content.contains("ai-cmd.plugin.zsh") || content.contains("noglob ai-cmd") {
+        content = content
+            .lines()
+            .filter(|line| !line.contains("ai-cmd") && !line.contains("ask-cmd.plugin"))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+
+    if content != original {
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        fs::write(path, content)?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+pub fn install_path(shell: ShellKind) -> Result<PathBuf> {
+    let path = rc_path(shell)?;
+    purge_legacy_integration(&path)?;
+    ensure_cargo_bin_in_path(&path)?;
+    Ok(path)
 }
 
 fn rc_path(shell: ShellKind) -> Result<PathBuf> {
@@ -58,12 +100,11 @@ fn rc_path(shell: ShellKind) -> Result<PathBuf> {
         ShellKind::Bash => home_join(".bashrc"),
         ShellKind::Zsh => home_join(".zshrc"),
         ShellKind::Fish => {
-            let p = dirs::config_dir()
+            Ok(dirs::config_dir()
                 .context("config dir")?
                 .join("fish")
                 .join("conf.d")
-                .join("ask-cmd.fish");
-            Ok(p)
+                .join("99-ask-path.fish"))
         }
         ShellKind::PowerShell => powershell_profile(),
     }
@@ -75,7 +116,7 @@ fn home_join(name: &str) -> Result<PathBuf> {
 
 #[cfg(not(windows))]
 fn powershell_profile() -> Result<PathBuf> {
-    bail!("PowerShell profile install is only supported on Windows from this command; append integrations/ask.ps1 manually")
+    bail!("PowerShell install is only supported on Windows")
 }
 
 #[cfg(windows)]
@@ -83,72 +124,25 @@ fn powershell_profile() -> Result<PathBuf> {
     home_join("Documents/PowerShell/Microsoft.PowerShell_profile.ps1")
 }
 
-fn build_snippet(bin: &Path) -> String {
-    let bin_str = bin.display().to_string();
-    format!(
-        r#"{MARKER_START}
-ask() {{
-    "{bin_str}" "$@"
-}}
-{MARKER_END}
-"#
-    )
+fn cargo_bin_dir() -> Result<PathBuf> {
+    dirs::home_dir()
+        .map(|h| h.join(".cargo").join("bin"))
+        .context("home dir")
 }
 
-pub fn build_fish_snippet(bin: &Path) -> String {
-    let bin_str = bin.display().to_string();
-    format!(
-        r#"# {MARKER_START}
-function ask
-    {bin_str} $argv
-end
-# {MARKER_END}
-"#
-    )
-}
+fn ensure_cargo_bin_in_path(path: &PathBuf) -> Result<()> {
+    let cargo_bin = cargo_bin_dir()?;
+    let line = format!(r#"export PATH="{}:$PATH" {PATH_MARKER}"#, cargo_bin.display());
 
-pub fn build_powershell_snippet(bin: &Path) -> String {
-    let bin_str = bin.display().to_string();
-    format!(
-        r#"# {MARKER_START}
-function ask {{
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-    & "{bin_str}" @Args
-}}
-# {MARKER_END}
-"#
-    )
-}
-
-pub fn install_fish(bin: &Path) -> Result<PathBuf> {
-    let target = rc_path(ShellKind::Fish)?;
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let snippet = build_fish_snippet(bin);
-    append_snippet(&target, &snippet)?;
-    Ok(target)
-}
-
-pub fn install_powershell(bin: &Path) -> Result<PathBuf> {
-    let target = rc_path(ShellKind::PowerShell)?;
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let snippet = build_powershell_snippet(bin);
-    append_snippet(&target, &snippet)?;
-    Ok(target)
-}
-
-fn append_snippet(path: &Path, snippet: &str) -> Result<()> {
     if path.exists() {
         let existing = fs::read_to_string(path)?;
-        if existing.contains(MARKER_START) {
+        if existing.contains(PATH_MARKER) || existing.contains(".cargo/bin") {
             return Ok(());
         }
     } else if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+
     let mut content = if path.exists() {
         fs::read_to_string(path)?
     } else {
@@ -157,10 +151,8 @@ fn append_snippet(path: &Path, snippet: &str) -> Result<()> {
     if !content.is_empty() && !content.ends_with('\n') {
         content.push('\n');
     }
-    content.push_str(snippet);
-    if !content.ends_with('\n') {
-        content.push('\n');
-    }
+    content.push_str(&line);
+    content.push('\n');
     fs::write(path, content)?;
     Ok(())
 }
@@ -168,16 +160,21 @@ fn append_snippet(path: &Path, snippet: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
-    fn append_idempotent() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("rc");
-        let snippet = build_snippet(Path::new("/usr/local/bin/ask-cmd"));
-        append_snippet(&path, &snippet).unwrap();
-        append_snippet(&path, &snippet).unwrap();
-        let text = fs::read_to_string(&path).unwrap();
-        assert_eq!(text.matches(MARKER_START).count(), 1);
+    fn purge_legacy_ask_wrapper() {
+        let mut tmp = NamedTempFile::new().unwrap();
+        write!(
+            tmp,
+            "plugins=(git ai-cmd)\n### ask-cmd shell integration\nask() {{ true; }}\n### end ask-cmd shell integration\n"
+        )
+        .unwrap();
+        let path = tmp.path().to_path_buf();
+        assert!(purge_legacy_integration(&path).unwrap());
+        let text = fs::read_to_string(path).unwrap();
+        assert!(!text.contains("ask-cmd shell integration"));
+        assert!(!text.contains("ask()"));
     }
 }

@@ -39,7 +39,7 @@ pub fn claude_install_hint() -> &'static str {
     "\
 未检测到 Claude Code CLI（claude 命令）。
 
-ask-cmd 通过本机 Claude Code 将自然语言转换为 shell 命令，不支持自行接入 API Key。
+`ask`（Rust CLI）通过本机 Claude Code 将自然语言转换为 shell 命令，不支持自行接入 API Key。
 
 请先安装并登录 Claude Code：
 

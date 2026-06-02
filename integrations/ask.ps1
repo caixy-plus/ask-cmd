@@ -1,6 +1,2 @@
-# PowerShell — `ask-cmd install --shell powershell`
-
-function ask {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-    & ask-cmd @Args
-}
+# Use the Rust binary directly (after: cargo install --path .)
+# Ensure ~/.cargo/bin is on PATH.

@@ -1,6 +1,2 @@
-# Bash / Zsh — installed automatically by `ask-cmd install`
-# Manual: add to ~/.bashrc or ~/.zshrc
-
-ask() {
-    ask-cmd "$@"
-}
+# Use the Rust binary directly (after: cargo install --path .)
+# Ensure ~/.cargo/bin is on PATH.

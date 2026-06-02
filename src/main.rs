@@ -11,7 +11,7 @@ use ask_cmd::validate;
 use ask_cmd::{pick_command, resolve_command, resolve_suggestions};
 
 #[derive(Parser, Debug)]
-#[command(name = "ask-cmd", about = "Natural language → shell command via Claude Code CLI")]
+#[command(name = "ask", about = "Natural language → shell command via Claude Code CLI", version)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -31,7 +31,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Install shell wrapper `ask` into your rc file
+    /// Add ~/.cargo/bin to PATH in your shell rc (no zsh plugin / wrapper)
     Install {
         #[arg(long, default_value = "auto")]
         shell: String,
@@ -44,26 +44,28 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Install { shell }) => {
             let kind = ShellKind::parse(&shell)?;
-            let bin = std::env::current_exe().context("current exe")?;
-            let target = match kind {
-                ShellKind::Fish => shell::install_fish(&bin)?,
-                ShellKind::PowerShell => shell::install_powershell(&bin)?,
-                _ => shell::install(kind, &bin)?,
-            };
+            let zshrc = dirs::home_dir().map(|h| h.join(".zshrc"));
+            if let Some(ref path) = zshrc {
+                if shell::purge_legacy_integration(path)? {
+                    eprintln!("{} Removed legacy ai-cmd / ask-cmd shell wrapper", style("✓").green());
+                }
+            }
+            let target = shell::install_path(kind)?;
             eprintln!(
-                "{} Installed `ask` wrapper → {}",
+                "{} Rust `ask` CLI ready — updated {}",
                 style("✓").green(),
                 target.display()
             );
-            eprintln!("Restart your terminal or run: source {}", target.display());
+            eprintln!("Restart terminal or: source {}", target.display());
+            eprintln!("Then run: ask -n 创建空文件 test.txt");
             return Ok(());
         }
         None => {}
     }
 
     if cli.query.is_empty() {
-        eprintln!("Usage: ask-cmd [-n] <what you want to do>");
-        eprintln!("       ask-cmd install [--shell auto|bash|zsh|fish|powershell]");
+        eprintln!("Usage: ask [-n] <what you want to do>");
+        eprintln!("       ask install [--shell auto|bash|zsh|fish|powershell]");
         std::process::exit(1);
     }
 

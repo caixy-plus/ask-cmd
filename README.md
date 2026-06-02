@@ -1,4 +1,4 @@
-# ask-cmd
+# ask (repo: ask-cmd)
 
 Natural language → shell command. Cross-platform CLI written in Rust.
 

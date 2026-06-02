@@ -9,7 +9,7 @@ cargo test --all
 echo "=== build release ==="
 cargo build --release
 
-BIN="./target/release/ask-cmd"
+BIN="./target/release/ask"
 echo "=== dry-run help ==="
 $BIN --help >/dev/null
 
