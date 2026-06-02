@@ -117,10 +117,7 @@ fn run_interactive(query: &str) -> Result<()> {
             }
         };
 
-        eprintln!();
-        eprintln!("Suggestions for: {}", style(query).bold());
-
-        match pick_command(&suggestions)? {
+        match pick_command(&suggestions, query)? {
             PickResult::Selected(idx) => {
                 let cmd = &suggestions[idx];
                 confirm_and_run(cmd)?;
