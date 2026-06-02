@@ -83,22 +83,32 @@ fn rerender(stderr: &mut io::Stderr, items: &[String], selected: usize) -> Resul
 }
 
 fn render_list(stderr: &mut io::Stderr, items: &[String], selected: usize) -> Result<()> {
-    queue!(stderr, terminal::Clear(ClearType::CurrentLine))?;
     for (i, item) in items.iter().enumerate() {
+        queue!(
+            stderr,
+            cursor::MoveToColumn(0),
+            terminal::Clear(ClearType::CurrentLine)
+        )?;
         if i == selected {
             queue!(
                 stderr,
                 style::SetAttribute(style::Attribute::Reverse),
                 style::Print(format!("  ▸ {item}  ")),
-                style::ResetColor,
+                style::SetAttribute(style::Attribute::Reset),
                 style::Print("\r\n"),
             )?;
         } else {
-            queue!(stderr, style::Print(format!("    {item}\r\n")))?;
+            queue!(
+                stderr,
+                style::SetAttribute(style::Attribute::Reset),
+                style::Print(format!("    {item}\r\n"))
+            )?;
         }
     }
     queue!(
         stderr,
+        cursor::MoveToColumn(0),
+        terminal::Clear(ClearType::CurrentLine),
         style::Print("\r\n  ↑↓ select  ↵ confirm  r retry  q quit\r\n"),
     )?;
     stderr.flush()?;
