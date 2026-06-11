@@ -7,6 +7,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::prompt::{single_system_prompt, single_user_prompt, suggestions_system_prompt, suggestions_user_prompt};
+use crate::providers::provider::Provider;
 
 pub const DEFAULT_TIMEOUT_SECS: u64 = 45;
 
@@ -51,13 +52,6 @@ pub fn claude_install_hint() -> &'static str {
 安装完成后重新打开终端，运行 `claude -p hello` 验证是否正常。"
 }
 
-pub fn ensure_claude() -> Result<()> {
-    if claude_available() {
-        return Ok(());
-    }
-    bail!("{}", claude_install_hint())
-}
-
 pub struct ClaudeProvider {
     pub timeout_secs: u64,
 }
@@ -70,17 +64,37 @@ impl Default for ClaudeProvider {
     }
 }
 
-impl ClaudeProvider {
-    pub fn suggest_sync(&self, query: &str) -> Result<String> {
+impl Provider for ClaudeProvider {
+    fn name(&self) -> &'static str {
+        "claude"
+    }
+
+    fn display_name(&self) -> &'static str {
+        "Claude Code"
+    }
+
+    fn available(&self) -> bool {
+        claude_available()
+    }
+
+    fn suggest_sync(&self, query: &str) -> Result<String> {
         self.run_claude(query, &suggestions_system_prompt(), &suggestions_user_prompt(query))
     }
 
-    pub fn query_sync(&self, query: &str) -> Result<String> {
+    fn query_sync(&self, query: &str) -> Result<String> {
         self.run_claude(query, &single_system_prompt(), &single_user_prompt(query))
     }
 
+    fn install_hint(&self) -> &'static str {
+        claude_install_hint()
+    }
+}
+
+impl ClaudeProvider {
     fn run_claude(&self, _query: &str, system: &str, user: &str) -> Result<String> {
-        ensure_claude()?;
+        if !claude_available() {
+            bail!("{}", claude_install_hint())
+        }
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?
@@ -90,7 +104,8 @@ impl ClaudeProvider {
     async fn run_claude_async(&self, system: &str, user: &str) -> Result<String> {
         let claude = resolve_claude_binary().expect("checked above");
         let mut cmd = Command::new(claude);
-        cmd.args(["--bare", "-p", user, "--system-prompt", system])
+        // --tools "": 禁用全部工具，纯文本生成 — 不会触发文件夹/工具授权，也无需放开权限
+        cmd.args(["-p", user, "--system-prompt", system, "--tools", "", "--no-session-persistence"])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -119,6 +134,9 @@ impl ClaudeProvider {
         if text.is_empty() {
             bail!("claude 返回为空。\n\n请确认已登录：claude login");
         }
+        if text.contains("Not logged in") || text.contains("/login") {
+            bail!("claude 未登录或认证失败。\n\n请运行：\n  claude login\n\n然后重试 ask 命令。");
+        }
         Ok(text)
     }
 }
@@ -130,5 +148,12 @@ mod tests {
     #[test]
     fn install_hint_mentions_claude_code() {
         assert!(claude_install_hint().contains("Claude Code"));
+    }
+
+    #[test]
+    fn provider_name() {
+        let p = ClaudeProvider::default();
+        assert_eq!(p.name(), "claude");
+        assert_eq!(p.display_name(), "Claude Code");
     }
 }

@@ -3,7 +3,7 @@ use std::io::{self, IsTerminal, Write};
 use anyhow::{Context, Result};
 use crossterm::{
     cursor, execute,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use crossterm::{queue, style};
@@ -43,9 +43,13 @@ fn pick_interactive(items: &[String], title: &str) -> Result<PickResult> {
             if !event::poll(std::time::Duration::from_millis(100))? {
                 continue;
             }
-            let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? else {
+            let Event::Key(KeyEvent { code, modifiers, kind, .. }) = event::read()? else {
                 continue;
             };
+            // Windows 上 Press/Release 各触发一次，只处理 Press 避免重复输入
+            if kind != KeyEventKind::Press {
+                continue;
+            }
 
             match code {
                 KeyCode::Up => {

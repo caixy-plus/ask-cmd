@@ -29,7 +29,7 @@ pub fn parse_suggestions(raw: &str) -> Result<Vec<String>> {
     }
 
     if out.is_empty() {
-        bail!("Claude 未返回可用的 shell 命令，请说得更具体，例如：创建空文件 test.txt");
+        bail!("ask 只处理 shell 命令请求，请描述你想在终端完成的操作，例如：创建空文件 test.txt、查找大文件、压缩目录等");
     }
     Ok(out)
 }
@@ -60,7 +60,7 @@ fn parse_json_array(raw: &str) -> Result<Vec<String>> {
 fn parse_embedded_array(raw: &str) -> Result<Vec<String>> {
     let re = Regex::new(r"\[[\s\S]*?\]").context("regex")?;
     let Some(found) = re.find(raw) else {
-        bail!("no JSON array in response");
+        bail!("AI 未返回可用命令，请换一种描述方式重试");
     };
     parse_json_array(found.as_str())
 }
